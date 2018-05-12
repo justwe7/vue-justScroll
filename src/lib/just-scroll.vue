@@ -1,7 +1,7 @@
 <template>
   <section class="just_scroller_wrapper" ref="scroller">
-    <div class="main" :style="transY">
-      <slot ref="main"></slot>
+    <div class="main" :class="{reset_ani: reset_ani}" ref="main" :style="transY">
+      <slot ></slot>
     </div>
     <!--<ul ref="main" id="xxx">
       <li v-for="(i,inex) in len">
@@ -27,18 +27,25 @@
       },
       data() {
           return {
+            oTouch: {//拖动的值
+              stPointY: 0,//初始点击的值 -- 暂时无法移除事件 先存vue
+              distance: 0//拖动距离
+            },
             isLoading: false,//加载的开关
+            reset_ani: false,
             moveY: 0,
             wrapperH: 0,//容器高度
             listH: 0,//内容高度
-            len: 40
+            len: 40,
+            loadtip: ''
           }
       },
       computed: {
         transY() {
           return {
+            transform: `translate3d(0,${this.oTouch.distance}px,0)`
 //            transform: `translate3d(0,${this.moveY}px,0)`
-            transform: `translate3d(0,0px,0)`
+//            transform: `translate3d(0,0px,0)`
           }
         },
         os() {
@@ -55,7 +62,13 @@
       watch: {
         isLoading() {//监听开关 修改内容高度
 //          this.autoFetch()
-          this.listH = document.getElementById('xxx').getBoundingClientRect().height;
+          this.$nextTick(() => {//dom添加完成 避免获取高度不准确
+            this.listH = this.$refs.main.getBoundingClientRect().height;
+            if (this.listH > this.wrapperH){
+              this.$refs.scroller.removeEventListener("touchmove", this._eMove);
+              document.removeEventListener("touchend", this._eEnd);
+            }
+          })
         }
       },
       mounted() {
@@ -73,7 +86,8 @@
 //          console.log(367);
           if (this.isLoading) return false;
           const Top = ev.target.scrollTop;
-          if (Top+this.wrapperH+50 > this.listH){
+//          console.log(Top+this.wrapperH+this.offset, this.listH);
+          if (Top+this.wrapperH+this.offset > this.listH){
 //            console.log(document.getElementById('xxx').clientHeight);
             this._dispathBottom();
           }
@@ -101,7 +115,7 @@
         },
         init() {//初始化绑定事件
           const Wrap = this.$refs.scroller;//滚动盒子
-          this.listH = document.getElementById('xxx').getBoundingClientRect().height;
+          this.listH = this.$refs.main.getBoundingClientRect().height;
           this.wrapperH = Wrap.getBoundingClientRect().height;
 //        console.log(Wrap.getBoundingClientRect());
 //        console.log(this.$refs.main.clientHeight);
@@ -110,20 +124,39 @@
           Wrap.addEventListener("scroll", this.scroll)
 
           if (this.os === 'ios' || this.os === 'Android'){
-            Wrap.addEventListener("touchstart", this._sD)
+            Wrap.addEventListener("touchstart", this._eStart)
           }else {
-            Wrap.addEventListener("mousedown", this._sD)
+            Wrap.addEventListener("mousedown", this._eStart)
           }
-          console.log(this.os);
         },
-        _sD(ev) {
-          const stPointY = ev.changedTouches['0'].clientY;
-//          console.log(ev.changedTouches['0'].clientY);
-          this.$refs.scroller.addEventListener("touchmove", ev=>{
-            const mPointY = ev.changedTouches['0'].clientY;
-            this.moveY = mPointY - stPointY;
-            console.log(mPointY);
-          })
+        _eStart(ev) {//点击开始
+          if (this.listH < this.wrapperH){
+            this.oTouch.stPointY = ev.changedTouches['0'].clientY + this.moveY;//记录点击位置
+            this.$refs.scroller.addEventListener("touchmove", this._eMove)
+            document.addEventListener("touchend", this._eEnd)
+          }
+        },
+        _eMove(ev) {//拖动
+          ev.preventDefault()
+          const mPointY = ev.changedTouches['0'].clientY;
+          this.oTouch.distance = mPointY - this.oTouch.stPointY;
+        },
+        _eEnd() {//抬起
+          if (Math.abs(this.oTouch.distance) > 100){
+            if (this.oTouch.distance > 0){
+              console.log('下拉');
+            }else {
+              console.log('提拉');
+              this._dispathBottom();
+            }
+          }
+          this.reset_ani = true;
+          this.oTouch.distance=0;
+          this.$refs.scroller.removeEventListener("touchmove", this._eMove);
+          document.removeEventListener("touchend", this._eEnd);
+          setTimeout(()=>{
+            this.reset_ani = false
+          }, 500)
         },
         destory() {//卸载事件
           this.$refs.scroller.removeEventListener("scroll", this.scroll)
@@ -139,9 +172,12 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 
-  /*.main{
-    transform:translate3d(0,10px,0);
-  }*/
+  .main{
+    transform:translate3d(0, 0, 0);
+    &.reset_ani{
+      transition: transform 0.5s;
+    }
+  }
 
   .loading{
     visibility: hidden;
